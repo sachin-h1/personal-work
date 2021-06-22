@@ -1,0 +1,111 @@
+Design an API Rate limiting system that monitors the number of requests per a window time(i.e. could be second/hour etc) a service agrees to allow. 
+IF the number of requests exceeds the allowed limit the rate limiter should block all excess calls.
+
+a)	Rate limiting should work for a distributed set up as the APIs are available through a group of API Gateways
+
+b)  What database would be used and the rationale behind the choice
+
+c)  How would throttling be done?
+
+d) 	The system should be highly available
+
+
+Solution: 
+
+
+As rate limiter for distributed system can be implementated only after comprehensive requirement study from all fronts. 
+Such as functional requirement, technical requirement, service load analysis, agreed SLA's from client's and so on.
+
+
+Stage I: high level design
+
+Separte rules repository which will be accessed by all service nodes in distributed system:
+	1. Throttle rules database 
+	2. Throttle rules service
+
+And each service host/node must have following:
+	3. Throttle rules retriever
+	4. Throttle rules cache
+	5. Rate limiter
+	6. Request processor (in case rate limiter allows requests)
+	7. Reject request handler
+
+1. Throttle rules database 
+All relevant throttle rules are saved in this database.We can choose either SQL or NoSQL database for rules storage. 
+This choice is based on technology used to build throttle rules service.
+
+2. Throttle rules service
+This service exposes API for saving new rules by service providers. 
+Mainly it exposes API to download rules from services in distributed system.
+
+3. Throttle rules retriever
+This component is present in each service of distributed system. It retrievs rules from rules service APIs exposed by Throttle rules service.
+Note: this component can be made independent from the services and can be shared across the distributed system. 
+It is tradeoff between efficiency and implementation overhead.
+
+4. Throttle rules cache
+For quick access a cache of fetched rules can be maintained. This also can be for each service or can be shared. 
+We can use Hazelcast cache to implementation.   
+
+5. Rate limiter
+For rate limiter there are several algorithms like Token bucket, Leaky bucket, Fixed window, Sliding window. 
+We can use any of these algorithms based on usage and requirement analysis.
+
+6. Request processor
+Finally when rate limiter allows request from client, Request processor will handle the internal operation of request by calling appropriate comtrollers.
+
+7. Reject request handler
+Either rejected request can be queued for later processing or relvant response can be sent back to client.
+Such as status 503(service unavailable) or status 429(too many requests)
+
+
+
+Stage II: Actual implementation strategy 
+
+Now Implementation OOPS related design explanation:
+
+we need following interfaces
+1. Job Schedular
+2. Rules Cache
+3. Client Indentifier (only if there specific client SLA's are to implementated)
+4. Rate Limiter
+
+And classes implementing abover interfaces.
+
+1. Retrieve Rules Tasks: 
+	a. Makes a remote call to rules service
+	b. Creates token buckets and loads them to into cache
+
+2. Retrieve Job Schedular implements Job Schedular
+   does following	
+	a. starts/stops schedular
+	b. Runs Retrieve rules tasks class 
+	
+3. Token Bucket Cache
+	a. Stores token bucket objects
+	b. Map/ Concurrent map
+	
+4. Client Indentifier Builder
+	a. Retrieves client indentity information from request context
+
+5. Token Bucket Rate Limiter
+	a. Retrieves token bucket from cache
+	b. Calls allowRequest() on bucket 
+	
+
+Given code snippet for Token bucket implementation.
+
+
+Stage III: Distributed system case study of our rate limiter implementation
+
+We have make sure all combined concurrent services/nodes in our system offers same amount request limit agreed. 
+So there must be a way in which these services communicate themselves.
+We can have following mesage broadcasting strategies.
+1. Tell everyone everything
+2. Gossip communication
+3. Distributed cache (in-memory): This is highly used in Distributed system achitecture
+4. Coordinate service
+5. Random leader selection
+
+Note: For all these communication we can use either TCP or UDP. 
+TCP for resilent and reliable system but it might be slow compare to UDP or for faster system UDP.
